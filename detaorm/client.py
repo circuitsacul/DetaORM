@@ -6,14 +6,23 @@ import typing as t
 import aiohttp
 
 from detaorm.paginator import RawPage
+from detaorm.query import Node
 from detaorm.types import RAW_ITEM
 
 if t.TYPE_CHECKING:
     from detaorm.base import Base
 
-__all__ = ("Client",)
+__all__ = ("Client", "RawPutItemsResponse")
 
 _LOG = logging.getLogger(__name__)
+
+
+class RawPutItemsResponse:
+    def __init__(
+        self, processed: list[RAW_ITEM], failed: list[RAW_ITEM]
+    ) -> None:
+        self.processed = processed
+        self.failed = failed
 
 
 class Client:
@@ -75,7 +84,7 @@ class Client:
     # api methods
     async def put_items(
         self, base_name: str, items: t.Sequence[RAW_ITEM]
-    ) -> None:
+    ) -> RawPutItemsResponse:
         """Stores multiple items in a single request.
 
         This request overwrites an item if the key already exists.
@@ -87,7 +96,11 @@ class Client:
         url = self._build_url(base_name, "items")
         if len(items) > 25:
             _LOG.warning("Only 25 items can be inserted at a time.")
-        await self._session.put(url, json={"items": items})
+        resp = await self._session.put(url, json={"items": items})
+        data = await resp.json()
+        return RawPutItemsResponse(
+            data["processed"]["items"], data["failed"]["items"]
+        )
 
     async def get_item(self, base_name: str, key: str) -> RAW_ITEM:
         """Get a stored item.
@@ -161,7 +174,7 @@ class Client:
     async def query_items(
         self,
         base_name: str,
-        query: t.Sequence[t.Mapping[str, object]] | None = None,
+        query: Node | t.Sequence[t.Mapping[str, object]] | None = None,
         limit: int = 0,
         last: str | None = None,
     ) -> RawPage:
@@ -177,6 +190,9 @@ class Client:
             A RawPage. Use RawPage.items to see the items, and RawPage.next()
             to get the next page.
         """
+
+        if isinstance(query, Node):
+            query = query.deta_query()
 
         data: dict[str, object] = {}
         if query:
