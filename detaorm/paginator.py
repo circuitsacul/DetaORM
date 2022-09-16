@@ -34,6 +34,6 @@ class RawPage:
         return await self.client.query_items(
             self.base_name,
             self.query,
-            limit=limit or self.limit,
+            limit=limit if limit is not None else self.limit,
             last=self.last,
         )

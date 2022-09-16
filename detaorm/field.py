@@ -22,7 +22,7 @@ class _Op:
     ) -> t.Callable[[object], Query]:
         def op_func(other: object) -> Query:
             assert isinstance(inst, Field)
-            return Query(inst.qualified_name + self.op, other)
+            return Query(inst.name + self.op, other)
 
         return op_func
 
@@ -62,7 +62,7 @@ class Field(t.Generic[_TYPE]):
     lt = _Op("lt")
     lte = _Op("lte")
     gte = _Op("gte")
-    prefx = _Op("pfx")
+    prefix = _Op("pfx")
     range = _Op("range")
     contains = _Op("contains")
     not_contains = _Op("not_contains")

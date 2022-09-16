@@ -39,8 +39,8 @@ class Page(t.Generic[_BASE]):
     def items(self) -> list[_BASE]:
         return [self.model(**d) for d in self.raw.items]
 
-    async def next(self) -> Page[_BASE] | None:
-        next = await self.raw.next()
+    async def next(self, limit: int | None = None) -> Page[_BASE] | None:
+        next = await self.raw.next(limit=limit)
         if next:
             return Page(next, self.model)
         return None
@@ -64,6 +64,8 @@ class Base:
         if not hasattr(cls, "__base_name__"):
             raise AttributeError(f"Base {cls} has no __base_name__ set.")
 
+        cls.key.name = "key"
+        cls.key.base_name = cls.__base_name__
         for key, value in cls.__dict__.items():
             if isinstance(value, Field):
                 value.name = key
