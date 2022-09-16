@@ -1,0 +1,206 @@
+from __future__ import annotations
+
+import logging
+import typing as t
+
+import aiohttp
+
+from detaorm.paginator import RawPage
+from detaorm.types import RAW_ITEM
+
+if t.TYPE_CHECKING:
+    from detaorm.base import Base
+
+__all__ = ("Client",)
+
+_LOG = logging.getLogger(__name__)
+
+
+class Client:
+    """A client for communicating with the DetaBase API.
+
+    Args:
+        project_key: The project key.
+        *bases: All of the models that will be used.
+    """
+
+    api_base_url = "https://database.deta.sh"
+    api_version = "v1"
+
+    def __init__(self, project_key: str, bases: t.Iterable[Base]) -> None:
+        for b in bases:
+            b._client = self
+        self.project_id = project_key.split("_")[0]
+        self.project_key = project_key
+        self.__session: aiohttp.ClientSession | None = None
+
+    @property
+    def ready(self) -> bool:
+        """Returns true if the client is ready to be used."""
+
+        return not (self.__session is None or self.__session.closed)
+
+    @property
+    def _session(self) -> aiohttp.ClientSession:
+        if not self.__session or self.__session.closed:
+            raise RuntimeError("Client has not been opened yet.")
+        return self.__session
+
+    async def open(self) -> None:
+        """Prepares the client to be used."""
+
+        if self.ready:
+            _LOG.warning("Client is already opened.")
+            return
+
+        self.__session = aiohttp.ClientSession(
+            self.api_base_url,
+            headers={
+                "X-API-Key": self.project_key,
+                "Content-Type": "application/json",
+            },
+            raise_for_status=True,
+        )
+
+    async def close(self) -> None:
+        """Closes the aiohttp session."""
+
+        if not self.ready:
+            _LOG.warning("Client is not open.")
+            return
+
+        await self._session.close()
+        self.__session = None
+
+    # api methods
+    async def put_items(
+        self, base_name: str, items: t.Sequence[RAW_ITEM]
+    ) -> None:
+        """Stores multiple items in a single request.
+
+        This request overwrites an item if the key already exists.
+
+        Args:
+            base_name: The name of the Base.
+            items: A list of items to insert."""
+
+        url = self._build_url(base_name, "items")
+        if len(items) > 25:
+            _LOG.warning("Only 25 items can be inserted at a time.")
+        await self._session.put(url, json={"items": items})
+
+    async def get_item(self, base_name: str, key: str) -> RAW_ITEM:
+        """Get a stored item.
+
+        Args:
+            base_name: The name of the Base.
+            key: The key of the item to get.
+
+        Returns:
+            A mapping of fields to values."""
+
+        url = self._build_url(base_name, f"items/{key}")
+        resp = await self._session.get(url)
+        return t.cast(RAW_ITEM, await resp.json())
+
+    async def delete_item(self, base_name: str, key: str) -> None:
+        """Delete a stored item.
+
+        Args:
+            base_name: The name of the Base.
+            key: The key of the item to delete."""
+
+        url = self._build_url(base_name, f"items/{key}")
+        await self._session.delete(url)
+
+    async def insert_item(self, base_name: str, item: RAW_ITEM) -> RAW_ITEM:
+        """Creates a new item only if no item with the same key exists.
+
+        Args:
+            base_name: The name of the Base.
+            item: The item to insert."""
+
+        url = self._build_url(base_name, "items")
+        resp = await self._session.post(url, json={"item": item})
+        return t.cast(RAW_ITEM, await resp.json())
+
+    async def update_item(
+        self,
+        base_name: str,
+        key: str,
+        field_set: dict[str, object],
+        field_increment: dict[str, int],
+        field_append: dict[str, list[object]],
+        field_prepend: dict[str, list[object]],
+        field_delete: list[str],
+    ) -> None:
+        """Update an item.
+
+        Args:
+            base_name: The name of the Base.
+            key: The key of the item to update.
+            field_set: A mapping of fields to set.
+            field_increment: A mapping of fields to increment.
+            field_append: A mapping of fields to append items to.
+            field_prepend: A mapping of fields to prepend items to.
+            field_delete: A list of fields to delete.
+        """
+
+        url = self._build_url(base_name, f"items/{key}")
+        await self._session.patch(
+            url,
+            json={
+                "set": field_set,
+                "increment": field_increment,
+                "append": field_append,
+                "prepend": field_prepend,
+                "delete": field_delete,
+            },
+        )
+
+    async def query_items(
+        self,
+        base_name: str,
+        query: t.Sequence[t.Mapping[str, object]] | None = None,
+        limit: int = 0,
+        last: str | None = None,
+    ) -> RawPage:
+        """Query items.
+
+        Args:
+            base_name: The name of the Base.
+            query: The query. Defaults to None.
+            limit: The maximum page size. Defaults to 0 (no limit).
+            last: The last key of the last page. Defaults to None.
+
+        Returns:
+            A RawPage. Use RawPage.items to see the items, and RawPage.next()
+            to get the next page.
+        """
+
+        data: dict[str, object] = {}
+        if query:
+            data["query"] = query
+        if limit:
+            data["limit"] = limit
+        if last:
+            data["last"] = last
+
+        url = self._build_url(base_name, "query")
+        resp = await self._session.post(url, json=data)
+        resp_data = await resp.json()
+        return RawPage(
+            client=self,
+            base_name=base_name,
+            query=query,
+            size=resp_data["paging"]["size"],
+            limit=limit,
+            last=resp_data["paging"].get("last"),
+            items=resp_data["items"],
+        )
+
+    def _build_url(self, base_name: str, relative_path: str) -> str:
+        return (
+            f"/{self.api_version}/{self.project_id}/{base_name}/"
+            f"{relative_path}"
+        )
