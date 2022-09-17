@@ -98,9 +98,9 @@ class Client:
             _LOG.warning("Only 25 items can be inserted at a time.")
         resp = await self._session.put(url, json={"items": items})
         data = await resp.json()
-        return RawPutItemsResponse(
-            data["processed"]["items"], data["failed"]["items"]
-        )
+        processed = data.get("processed", {}).get("items", [])
+        failed = data.get("failed", {}).get("items", [])
+        return RawPutItemsResponse(processed, failed)
 
     async def get_item(self, base_name: str, key: str) -> RAW_ITEM:
         """Get a stored item.
