@@ -75,9 +75,38 @@ class Base:
         self.raw = values
         self._updates: dict[str, object] = {}
 
+    # model methods
+    # these methods further abstract the methods on Base.
+    async def delete(self) -> None:
+        return await self.delete_item(self.key)
+
+    async def insert(self: _BASE) -> _BASE:
+        return await self.insert_item(self)
+
     # abstracted api methods
+    # these methods abstract the methods on Client.
     @classmethod
-    async def put_items(
+    async def get(cls: type[_BASE], key: str) -> _BASE:
+        return cls(**await cls._client.get_item(cls.__base_name__, key))
+
+    @classmethod
+    async def where(
+        cls: type[_BASE],
+        query: Node | t.Sequence[t.Mapping[str, object]] | None = None,
+        limit: int = 0,
+        last: str | None = None,
+    ) -> Page[_BASE]:
+        return Page(
+            await cls._client.query_items(
+                cls.__base_name__, query=query, limit=limit, last=last
+            ),
+            cls,
+        )
+
+    # these methods abstract the methods on Client, but are abstracted
+    # further on this model.
+    @classmethod
+    async def insert_many(
         cls: type[_BASE], items: t.Sequence[_BASE]
     ) -> PutItemsResponse[_BASE]:
         return PutItemsResponse(
@@ -86,10 +115,6 @@ class Base:
             ),
             cls,
         )
-
-    @classmethod
-    async def get_item(cls: type[_BASE], key: str) -> _BASE:
-        return cls(**await cls._client.get_item(cls.__base_name__, key))
 
     @classmethod
     async def delete_item(cls, key: str) -> None:
@@ -102,20 +127,6 @@ class Base:
         )
 
     # TODO: update_item
-
-    @classmethod
-    async def query_items(
-        cls: type[_BASE],
-        query: Node | t.Sequence[t.Mapping[str, object]] | None = None,
-        limit: int = 0,
-        last: str | None = None,
-    ) -> Page[_BASE]:
-        return Page(
-            await cls._client.query_items(
-                cls.__base_name__, query=query, limit=limit, last=last
-            ),
-            cls,
-        )
 
     # magic
     def __repr__(self) -> str:
