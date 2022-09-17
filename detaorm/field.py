@@ -66,3 +66,11 @@ class Field(t.Generic[_TYPE]):
     range = _Op("range")
     contains = _Op("contains")
     not_contains = _Op("not_contains")
+
+    # magic
+    __eq__ = eq  # type: ignore
+    __ne__ = neq  # type: ignore
+    __gt__ = gt
+    __lt__ = lt
+    __ge__ = gte
+    __le__ = lte
