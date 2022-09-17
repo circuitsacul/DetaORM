@@ -46,21 +46,21 @@ class RawPage:
         last: str | None,
         items: t.Sequence[RAW_ITEM],
     ) -> None:
-        self.base_name = base_name
-        self.query = query
-        self.client = client
-        self.limit = limit
+        self._base_name = base_name
+        self._query = query
+        self._client = client
+        self._limit = limit
+        self._last = last
         self.size = size
-        self.last = last
         self.items = items
 
     async def next(self, limit: int | None = None) -> RawPage | None:
-        if not self.last:
+        if not self._last:
             return None
 
-        return await self.client.query_items(
-            self.base_name,
-            self.query,
-            limit=limit if limit is not None else self.limit,
-            last=self.last,
+        return await self._client.query_items(
+            self._base_name,
+            self._query,
+            limit=limit if limit is not None else self._limit,
+            last=self._last,
         )

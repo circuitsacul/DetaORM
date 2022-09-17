@@ -57,6 +57,10 @@ class Page(t.Generic[_BASE]):
     def items(self) -> list[_BASE]:
         return [self.model(**d) for d in self.raw.items]
 
+    @property
+    def size(self) -> int:
+        return self.raw.size
+
     async def next(self, limit: int | None = None) -> Page[_BASE] | None:
         next = await self.raw.next(limit=limit)
         if next:
