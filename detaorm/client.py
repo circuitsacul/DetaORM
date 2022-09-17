@@ -5,7 +5,7 @@ import typing as t
 
 import aiohttp
 
-from detaorm.paginator import RawPage
+from detaorm.paginator import RawPage, RawPaginator
 from detaorm.query import Node
 from detaorm.types import RAW_ITEM
 
@@ -171,13 +171,13 @@ class Client:
             },
         )
 
-    async def query_items(
+    def query_items(
         self,
         base_name: str,
         query: Node | t.Sequence[t.Mapping[str, object]] | None = None,
         limit: int = 0,
         last: str | None = None,
-    ) -> RawPage:
+    ) -> RawPaginator:
         """Query items.
 
         Args:
@@ -191,29 +191,38 @@ class Client:
             to get the next page.
         """
 
-        if isinstance(query, Node):
-            query = query.deta_query()
+        async def first_page(
+            base_name: str,
+            query: Node | t.Sequence[t.Mapping[str, object]] | None = None,
+            limit: int = 0,
+            last: str | None = None,
+        ) -> RawPage:
+            if isinstance(query, Node):
+                query = query.deta_query()
 
-        data: dict[str, object] = {}
-        if query:
-            data["query"] = query
-        if limit:
-            data["limit"] = limit
-        if last:
-            data["last"] = last
+            data: dict[str, object] = {}
+            if query:
+                data["query"] = query
+            if limit:
+                data["limit"] = limit
+            if last:
+                data["last"] = last
 
-        url = self._build_url(base_name, "query")
-        resp = await self._session.post(url, json=data)
-        resp_data = await resp.json()
-        return RawPage(
-            client=self,
-            base_name=base_name,
-            query=query,
-            size=resp_data["paging"]["size"],
-            limit=limit,
-            last=resp_data["paging"].get("last"),
-            items=resp_data["items"],
-        )
+            url = self._build_url(base_name, "query")
+
+            resp = await self._session.post(url, json=data)
+            resp_data = await resp.json()
+            return RawPage(
+                client=self,
+                base_name=base_name,
+                query=query,
+                size=resp_data["paging"]["size"],
+                limit=limit,
+                last=resp_data["paging"].get("last"),
+                items=resp_data["items"],
+            )
+
+        return RawPaginator(first_page(base_name, query, limit, last))
 
     def _build_url(self, base_name: str, relative_path: str) -> str:
         return (

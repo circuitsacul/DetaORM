@@ -6,7 +6,7 @@ from detaorm.field import Field
 
 if t.TYPE_CHECKING:
     from detaorm.client import Client, RawPutItemsResponse
-    from detaorm.paginator import RawPage
+    from detaorm.paginator import RawPage, RawPaginator
     from detaorm.query import Node
 
 __all__ = ("Base", "PutItemsResponse")
@@ -28,6 +28,24 @@ class PutItemsResponse(t.Generic[_BASE]):
     @property
     def failed(self) -> list[_BASE]:
         return [self.model(**d) for d in self.raw.failed]
+
+
+class Paginator(t.Generic[_BASE]):
+    def __init__(self, raw: RawPaginator, model: type[_BASE]) -> None:
+        self.model = model
+        self.raw = raw
+
+    def __await__(self) -> t.Generator[t.Any, None, Page[_BASE]]:
+        async def await_page() -> Page[_BASE]:
+            return Page(await self.raw, self.model)
+
+        return await_page().__await__()
+
+    def __aiter__(self) -> Paginator[_BASE]:
+        return self
+
+    async def __anext__(self) -> Page[_BASE]:
+        return Page(await self.raw.__anext__(), self.model)
 
 
 class Page(t.Generic[_BASE]):
@@ -90,14 +108,14 @@ class Base:
         return cls(**await cls._client.get_item(cls.__base_name__, key))
 
     @classmethod
-    async def where(
+    def where(
         cls: type[_BASE],
         query: Node | t.Sequence[t.Mapping[str, object]] | None = None,
         limit: int = 0,
         last: str | None = None,
-    ) -> Page[_BASE]:
-        return Page(
-            await cls._client.query_items(
+    ) -> Paginator[_BASE]:
+        return Paginator(
+            cls._client.query_items(
                 cls.__base_name__, query=query, limit=limit, last=last
             ),
             cls,
