@@ -11,6 +11,7 @@ from detaorm.types import RAW_ITEM
 
 if t.TYPE_CHECKING:
     from detaorm.base import Base
+    from detaorm.update import Update
 
 __all__ = ("Client", "RawPutItemsResponse")
 
@@ -141,35 +142,56 @@ class Client:
         self,
         base_name: str,
         key: str,
-        field_set: dict[str, object],
-        field_increment: dict[str, int],
-        field_append: dict[str, list[object]],
-        field_prepend: dict[str, list[object]],
-        field_delete: list[str],
-    ) -> None:
+        *updates: Update,
+        set: dict[str, object] | None = None,
+        increment: dict[str, int] | None = None,
+        append: dict[str, list[object]] | None = None,
+        prepend: dict[str, list[object]] | None = None,
+        delete: list[str] | None = None,
+    ) -> dict[str, object]:
         """Update an item.
 
         Args:
             base_name: The name of the Base.
             key: The key of the item to update.
-            field_set: A mapping of fields to set.
-            field_increment: A mapping of fields to increment.
-            field_append: A mapping of fields to append items to.
-            field_prepend: A mapping of fields to prepend items to.
-            field_delete: A list of fields to delete.
+            *updates: Update objects.
+            set: A mapping of fields to set.
+            increment: A mapping of fields to increment.
+            append: A mapping of fields to append items to.
+            prepend: A mapping of fields to prepend items to.
+            delete: A list of fields to delete.
+
+        Returns:
+            The generated update query.
         """
 
+        def join(left: object, right: object) -> object:
+            if isinstance(left, t.Mapping):
+                assert isinstance(right, t.Mapping)
+                return {**left, **right}
+            elif isinstance(left, t.Sequence):
+                assert isinstance(right, t.Sequence)
+                return [*left, *right]
+            else:
+                raise TypeError
+
+        data = {
+            "set": set or {},
+            "increment": increment or {},
+            "append": append or {},
+            "prepend": prepend or {},
+            "delete": delete or [],
+        }
+
+        for update in updates:
+            if (val := data.get(update.field)) is not None:
+                data[update.field] = join(val, update.payload)
+            else:
+                raise ValueError(f"Unexpected field {update.field}.")
+
         url = self._build_url(base_name, f"items/{key}")
-        await self._session.patch(
-            url,
-            json={
-                "set": field_set,
-                "increment": field_increment,
-                "append": field_append,
-                "prepend": field_prepend,
-                "delete": field_delete,
-            },
-        )
+        await self._session.patch(url, json=data)
+        return data
 
     def query_items(
         self,

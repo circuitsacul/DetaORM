@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import typing as t
 
+from detaorm import update
 from detaorm.query import Query
 
 if t.TYPE_CHECKING:
@@ -56,6 +57,7 @@ class Field(t.Generic[_TYPE]):
 
         return f"{self.base_name}.{self.name}"
 
+    # query ops
     eq = _Op(None)
     neq = _Op("ne")
     gt = _Op("gt")
@@ -66,6 +68,22 @@ class Field(t.Generic[_TYPE]):
     range = _Op("range")
     contains = _Op("contains")
     not_contains = _Op("not_contains")
+
+    # updates
+    def set(self, value: object) -> update.SetUpdate:
+        return update.SetUpdate({self.name: value})
+
+    def increment(self, value: int) -> update.IncrementUpdate:
+        return update.IncrementUpdate({self.name: value})
+
+    def append(self, values: list[object]) -> update.AppendUpdate:
+        return update.AppendUpdate({self.name: values})
+
+    def prepend(self, values: list[object]) -> update.PrependUpdate:
+        return update.PrependUpdate({self.name: values})
+
+    def delete(self) -> update.DeleteUpdate:
+        return update.DeleteUpdate([self.name])
 
     # magic
     __eq__ = eq  # type: ignore

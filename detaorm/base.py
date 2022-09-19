@@ -8,6 +8,7 @@ if t.TYPE_CHECKING:
     from detaorm.client import Client, RawPutItemsResponse
     from detaorm.paginator import RawPage, RawPaginator
     from detaorm.query import Node
+    from detaorm.update import Update
 
 __all__ = ("Base", "PutItemsResponse")
 
@@ -105,6 +106,59 @@ class Base:
     async def insert(self: _BASE) -> _BASE:
         return await self.insert_item(self)
 
+    async def update(
+        self: _BASE,
+        *updates: Update,
+        set: dict[str, object] | None = None,
+        increment: dict[str, int] | None = None,
+        append: dict[str, list[object]] | None = None,
+        prepend: dict[str, list[object]] | None = None,
+        delete: list[str] | None = None,
+    ) -> _BASE:
+        ud = await self.update_item(
+            self.key,
+            *updates,
+            set=set,
+            increment=increment,
+            append=append,
+            prepend=prepend,
+            delete=delete,
+        )
+        new_self = type(self)()
+        new_self.raw = self.raw
+
+        def cd(obj: object) -> dict[str, object]:
+            assert isinstance(obj, dict)
+            assert all(isinstance(k, str) for k in obj.keys())
+            return obj
+
+        def cl(obj: object) -> list[str]:
+            assert isinstance(obj, list)
+            assert all(isinstance(k, str) for k in obj)
+            return obj
+
+        for k, v in cd(ud["set"]).items():
+            new_self.raw[k] = v
+        for k, v in cd(ud["increment"]).items():
+            assert isinstance(v, int)
+            orig = new_self.raw[k]
+            assert isinstance(orig, int)
+            new_self.raw[k] = orig + v
+        for k, v in cd(ud["append"]).items():
+            assert isinstance(v, list)
+            orig = new_self.raw[k]
+            assert isinstance(orig, list)
+            new_self.raw[k] = orig + v
+        for k, v in cd(ud["prepend"]).items():
+            assert isinstance(v, list)
+            orig = new_self.raw[k]
+            assert isinstance(orig, list)
+            new_self.raw[k] = v + orig
+        for k in cl(ud["delete"]):
+            new_self.raw.pop(k)
+
+        return new_self
+
     # abstracted api methods
     # these methods abstract the methods on Client.
     @classmethod
@@ -148,7 +202,27 @@ class Base:
             **await cls._client.insert_item(cls.__base_name__, item.raw)
         )
 
-    # TODO: update_item
+    @classmethod
+    async def update_item(
+        cls,
+        key: str,
+        *updates: Update,
+        set: dict[str, object] | None = None,
+        increment: dict[str, int] | None = None,
+        append: dict[str, list[object]] | None = None,
+        prepend: dict[str, list[object]] | None = None,
+        delete: list[str] | None = None,
+    ) -> dict[str, object]:
+        return await cls._client.update_item(
+            cls.__base_name__,
+            key,
+            *updates,
+            set=set,
+            increment=increment,
+            append=append,
+            prepend=prepend,
+            delete=delete,
+        )
 
     # magic
     def __repr__(self) -> str:
