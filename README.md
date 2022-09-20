@@ -1,5 +1,7 @@
 # DetaORM
-An async ORM for DetaBase.
+An async ORM for [DetaBase](https://docs.deta.sh/docs/base/about/).
+
+[Support](https://discord.gg/dGAzZDaTS9) | [PyPI](https://pypi.org/project/detaorm)
 
 ## Example Usage
 Here's some examples of DetaORM, with commentary. I'll add real documentation at some point.
