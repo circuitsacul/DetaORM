@@ -27,7 +27,11 @@ class User(Base, name="users"):
 # create the client
 # you have to list the bases when creating the client to
 # allow the client to setup properly.
-client = Client("<project key>", [User])
+client = Client("<project key>", bases=[User])
+# If you don't specify a project key, DetaORM will try to
+# get a project key from the environment, which means that
+# you don't need to specify a project keys when running
+# your app with Deta Micros.
 
 # actual usage:
 new_user = User(username="CircuitSacul")
