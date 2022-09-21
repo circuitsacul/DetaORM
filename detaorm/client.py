@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import typing as t
 
 import aiohttp
@@ -31,17 +32,27 @@ class Client:
 
     Args:
         project_key: The project key.
-        *bases: All of the models that will be used.
+        bases: All of the models that will be used.
     """
 
     api_base_url = "https://database.deta.sh"
     api_version = "v1"
 
-    def __init__(self, project_key: str, bases: t.Iterable[Base]) -> None:
+    def __init__(
+        self, project_key: str | None = None, *, bases: t.Iterable[Base]
+    ) -> None:
         for b in bases:
             b._client = self
-        self.project_id = project_key.split("_")[0]
+
+        project_key = project_key or os.getenv("DETA_PROJECT_KEY")
+        if not project_key:
+            raise ValueError(
+                "No project key provided. Please set a project key as an env "
+                "variable, or pass it as an arg to Client."
+            )
+
         self.project_key = project_key
+        self.project_id = project_key.split("_")[0]
         self.__session: aiohttp.ClientSession | None = None
 
     @property
