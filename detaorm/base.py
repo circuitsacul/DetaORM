@@ -83,9 +83,8 @@ class Base:
 
     key: Field[str] = Field()
 
-    def __init_subclass__(cls) -> None:
-        if not hasattr(cls, "__base_name__"):
-            raise AttributeError(f"Base {cls} has no __base_name__ set.")
+    def __init_subclass__(cls, name: str | None = None) -> None:
+        cls.__base_name__ = name or cls.__name__.lower()
 
         cls.key.name = "key"
         cls.key.base_name = cls.__base_name__

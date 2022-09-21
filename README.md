@@ -11,9 +11,10 @@ from detaorm import Client, Base, Field
 
 
 # create your base(s) (or models)
-class User(Base):
-    # the name of your base
-    __base_name__ = "users"
+class User(Base, name="users"):
+    # name is the name of your base. If left empty, it will
+    # default to the lowered name of the class ("user" in
+    # this case.)
 
     # all bases have a `key` field already.
 
