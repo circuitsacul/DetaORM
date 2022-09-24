@@ -23,7 +23,7 @@ class _Op:
     ) -> t.Callable[[object], Query]:
         def op_func(other: object) -> Query:
             assert isinstance(inst, Field)
-            return Query(inst.name + self.op, other)
+            return Query(inst.qual_name + self.op, other)
 
         return op_func
 
@@ -33,29 +33,45 @@ class Field(t.Generic[_TYPE]):
 
     name: str
     """The name of the field."""
-    base_name: str
-    """The name of the Base this field belongs to."""
+
+    @property
+    def qual_name(self) -> str:
+        """The qualified name of this field."""
+        return self.__qual_name
+
+    @qual_name.setter
+    def qual_name(self, val: str) -> None:
+        self.__qual_name = val
+
+        for k, v in self.__class__.__dict__.items():
+            if isinstance(v, Field):
+                v.name = k
+                v.qual_name = f"{self.qual_name}.{k}"
+
+    def __init_subclass__(cls) -> None:
+        for k, v in cls.__dict__.items():
+            if isinstance(v, Field):
+                v.name = k
 
     @t.overload
     def __get__(self: _SELF, inst: None, cls: t.Any) -> _SELF:
         ...
 
     @t.overload
-    def __get__(self: _SELF, inst: Base, cls: t.Any) -> _TYPE:
+    def __get__(self, inst: Base | NestedField, cls: t.Any) -> _TYPE:
         ...
 
     def __get__(
-        self: _SELF, inst: Base | None, cls: t.Any
+        self: _SELF, inst: Base | NestedField | None, cls: t.Any
     ) -> _SELF | _TYPE:
+        if isinstance(inst, NestedField) and not isinstance(
+            inst, NestedFieldInst
+        ):
+            return self
+
         if inst:
             return t.cast(_TYPE, inst.raw[self.name])
         return self
-
-    @property
-    def qualified_name(self) -> str:
-        """The fully qualified name of this field."""
-
-        return f"{self.base_name}.{self.name}"
 
     # query ops
     eq = _Op(None)
@@ -92,3 +108,34 @@ class Field(t.Generic[_TYPE]):
     __lt__ = lt
     __ge__ = gte
     __le__ = lte
+
+
+class NestedField(Field[t.Dict[str, object]]):
+    @property
+    def raw(self) -> dict[str, object]:
+        raise NotImplementedError
+
+    def __get__(  # type: ignore
+        self: _SELF, inst: None | Base | NestedField, cls: t.Any
+    ) -> _SELF:
+        if isinstance(inst, NestedField) and not isinstance(
+            inst, NestedFieldInst
+        ):
+            return self
+
+        if inst:
+            return NestedFieldInst(self, inst)  # type: ignore
+        return self
+
+
+class NestedFieldInst:
+    def __init__(self, field: NestedField, base: Base) -> None:
+        self.field = field
+        self.base = base
+
+    @property
+    def raw(self) -> dict[str, object]:
+        return self.base.raw[self.field.name]  # type: ignore
+
+    def __getattr__(self, key: str) -> object:
+        return getattr(self.field, key).__get__(self, type(self))

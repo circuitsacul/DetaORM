@@ -88,11 +88,10 @@ class Base:
         cls.__base_name__ = name or cls.__name__.lower()
 
         cls.key.name = "key"
-        cls.key.base_name = cls.__base_name__
         for key, value in cls.__dict__.items():
             if isinstance(value, Field):
                 value.name = key
-                value.base_name = cls.__base_name__
+                value.qual_name = key
 
     def __init__(self, **values: object) -> None:
         self.raw = values
