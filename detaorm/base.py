@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import typing as t
+from datetime import datetime, timedelta
 
 from detaorm.field import Field
 
@@ -102,8 +103,15 @@ class Base:
     async def delete(self) -> None:
         return await self.delete_item(self.key)
 
-    async def insert(self: _BASE) -> _BASE:
-        return await self.insert_item(self)
+    async def insert(
+        self: _BASE,
+        *,
+        expire_at: int | datetime | None = None,
+        expire_in: int | timedelta | None = None,
+    ) -> _BASE:
+        return await self.insert_item(
+            self, expire_at=expire_at, expire_in=expire_in
+        )
 
     async def update(
         self: _BASE,
@@ -182,11 +190,18 @@ class Base:
     # further on this model.
     @classmethod
     async def insert_many(
-        cls: type[_BASE], items: t.Sequence[_BASE]
+        cls: type[_BASE],
+        items: t.Sequence[_BASE],
+        *,
+        expire_at: int | datetime | None = None,
+        expire_in: int | timedelta | None = None,
     ) -> PutItemsResponse[_BASE]:
         return PutItemsResponse(
             await cls._client.put_items(
-                cls.__base_name__, [i.raw for i in items]
+                cls.__base_name__,
+                [i.raw for i in items],
+                expire_at=expire_at,
+                expire_in=expire_in,
             ),
             cls,
         )
@@ -196,9 +211,20 @@ class Base:
         await cls._client.delete_item(cls.__base_name__, key)
 
     @classmethod
-    async def insert_item(cls: type[_BASE], item: _BASE) -> _BASE:
+    async def insert_item(
+        cls: type[_BASE],
+        item: _BASE,
+        *,
+        expire_at: int | datetime | None = None,
+        expire_in: int | timedelta | None = None,
+    ) -> _BASE:
         return cls(
-            **await cls._client.insert_item(cls.__base_name__, item.raw)
+            **await cls._client.insert_item(
+                cls.__base_name__,
+                item.raw,
+                expire_at=expire_at,
+                expire_in=expire_in,
+            )
         )
 
     @classmethod

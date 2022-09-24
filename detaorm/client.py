@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import typing as t
+from datetime import datetime, timedelta, timezone
 
 import aiohttp
 
@@ -17,6 +18,30 @@ if t.TYPE_CHECKING:
 __all__ = ("Client", "RawPutItemsResponse")
 
 _LOG = logging.getLogger(__name__)
+
+
+def _with_ttl(
+    dct: dict[str, object],
+    expire_at: int | datetime | None,
+    expire_in: int | timedelta | None,
+) -> dict[str, object]:
+    if expire_in and expire_at:
+        raise ValueError("You cannot specify 'expire_at' and 'expire_in'.")
+
+    if expire_in:
+        if isinstance(expire_in, int):
+            expire_in = timedelta(seconds=expire_in)
+
+        expire_at = datetime.now(timezone.utc) + expire_in
+
+    if isinstance(expire_at, datetime):
+        expire_at = int(expire_at.timestamp())
+
+    if expire_at:
+        dct = dct.copy()
+        dct["__expires"] = expire_at
+
+    return dct
 
 
 class RawPutItemsResponse:
@@ -95,7 +120,12 @@ class Client:
 
     # api methods
     async def put_items(
-        self, base_name: str, items: t.Sequence[RAW_ITEM]
+        self,
+        base_name: str,
+        items: t.Sequence[RAW_ITEM],
+        *,
+        expire_at: int | datetime | None = None,
+        expire_in: int | timedelta | None = None,
     ) -> RawPutItemsResponse:
         """Stores multiple items in a single request.
 
@@ -103,13 +133,18 @@ class Client:
 
         Args:
             base_name: The name of the Base.
-            items: A list of items to insert."""
+            items: A list of items to insert.
+            expire_at: A Unix timestamp that these items should expire at.
+            expire_in: The number of seconds until this item expires."""
 
-        url = self._build_url(base_name, "items")
         if len(items) > 25:
             _LOG.warning("Only 25 items can be inserted at a time.")
+
+        items = [_with_ttl(i, expire_at, expire_in) for i in items]
+        url = self._build_url(base_name, "items")
         resp = await self._session.put(url, json={"items": items})
-        data = await resp.json()
+
+        data: dict[str, dict[str, list[RAW_ITEM]]] = await resp.json()
         processed = data.get("processed", {}).get("items", [])
         failed = data.get("failed", {}).get("items", [])
         return RawPutItemsResponse(processed, failed)
@@ -138,15 +173,25 @@ class Client:
         url = self._build_url(base_name, f"items/{key}")
         await self._session.delete(url)
 
-    async def insert_item(self, base_name: str, item: RAW_ITEM) -> RAW_ITEM:
+    async def insert_item(
+        self,
+        base_name: str,
+        item: RAW_ITEM,
+        *,
+        expire_at: int | datetime | None = None,
+        expire_in: int | timedelta | None = None,
+    ) -> RAW_ITEM:
         """Creates a new item only if no item with the same key exists.
 
         Args:
             base_name: The name of the Base.
-            item: The item to insert."""
+            item: The item to insert.
+            expire_at: The time at which the item should expire (UTC timetamp).
+            expire_in: The time until this item should expire."""
 
+        json = _with_ttl({"items": item}, expire_at, expire_in)
         url = self._build_url(base_name, "items")
-        resp = await self._session.post(url, json={"item": item})
+        resp = await self._session.post(url, json=json)
         return t.cast(RAW_ITEM, await resp.json())
 
     async def update_item(
