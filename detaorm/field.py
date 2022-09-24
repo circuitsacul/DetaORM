@@ -10,7 +10,7 @@ if t.TYPE_CHECKING:
 
 __all__ = ("Field",)
 
-_SELF = t.TypeVar("_SELF", bound="Field[object]")
+_SELF = t.TypeVar("_SELF", bound="Field[t.Any]")
 _TYPE = t.TypeVar("_TYPE")
 
 
@@ -37,15 +37,15 @@ class Field(t.Generic[_TYPE]):
     """The name of the Base this field belongs to."""
 
     @t.overload
-    def __get__(self: _SELF, inst: None, cls: type[Base]) -> _SELF:
+    def __get__(self: _SELF, inst: None, cls: t.Any) -> _SELF:
         ...
 
     @t.overload
-    def __get__(self: _SELF, inst: Base, cls: type[Base]) -> _TYPE:
+    def __get__(self: _SELF, inst: Base, cls: t.Any) -> _TYPE:
         ...
 
     def __get__(
-        self: _SELF, inst: Base | None, cls: type[Base]
+        self: _SELF, inst: Base | None, cls: t.Any
     ) -> _SELF | _TYPE:
         if inst:
             return t.cast(_TYPE, inst.raw[self.name])
