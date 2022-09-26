@@ -4,6 +4,7 @@ import typing as t
 from datetime import datetime, timedelta
 
 from detaorm.field import Field
+from detaorm.undef import UNDEF
 
 if t.TYPE_CHECKING:
     from detaorm.client import Client, RawPutItemsResponse
@@ -81,21 +82,32 @@ class Base:
     __base_name__: str
     """The name of this Base."""
     _client: Client
+    _defaults: dict[str, object]
 
     key: Field[str] = Field()
 
     def __init_subclass__(cls, name: str | None = None) -> None:
         cls.__base_name__ = name or cls.__name__.lower()
+        cls._defaults = {}
 
         cls.key.name = "key"
+
         for key, value in cls.__dict__.items():
             if isinstance(value, Field):
                 value.name = key
                 value.qual_name = key
 
+                if value.default is not UNDEF:
+                    cls._defaults[key] = value.default
+
     def __init__(self, **values: object) -> None:
         self.raw = values
         self._updates: dict[str, object] = {}
+
+    def _with_defaults(self) -> dict[str, object]:
+        dct = self._defaults.copy()
+        dct.update(self.raw)
+        return dct
 
     # model methods
     # these methods further abstract the methods on Base.
@@ -143,25 +155,55 @@ class Base:
             assert all(isinstance(k, str) for k in obj)
             return obj
 
+        def traverse(
+            dct: dict[str, object], key: str
+        ) -> tuple[dict[str, object], str]:
+            keys = key.split(".")
+
+            final_key = keys.pop(-1)
+            final_dict = dct
+            for k in keys:
+                final_dict = final_dict.setdefault(k, {})  # type: ignore
+
+            return final_dict, final_key
+
         for k, v in cd(ud["set"]).items():
-            new_self.raw[k] = v
+            dct, fk = traverse(new_self.raw, k)
+            dct[fk] = v
+
         for k, v in cd(ud["increment"]).items():
+            dct, fk = traverse(new_self.raw, k)
+            if fk not in dct:
+                continue
+
             assert isinstance(v, int)
-            orig = new_self.raw[k]
+            orig = dct[fk]
             assert isinstance(orig, int)
-            new_self.raw[k] = orig + v
+            dct[fk] = orig + v
+
         for k, v in cd(ud["append"]).items():
+            dct, fk = traverse(new_self.raw, k)
+            if fk not in dct:
+                continue
+
             assert isinstance(v, list)
-            orig = new_self.raw[k]
+            orig = dct[fk]
             assert isinstance(orig, list)
-            new_self.raw[k] = orig + v
+            dct[fk] = orig + v
+
         for k, v in cd(ud["prepend"]).items():
+            dct, fk = traverse(new_self.raw, k)
+            if fk not in dct:
+                continue
+
             assert isinstance(v, list)
-            orig = new_self.raw[k]
+            orig = dct[fk]
             assert isinstance(orig, list)
-            new_self.raw[k] = v + orig
+            dct[fk] = v + orig
+
         for k in cl(ud["delete"]):
-            new_self.raw.pop(k)
+            dct, fk = traverse(new_self.raw, k)
+            dct.pop(fk)
 
         return new_self
 
@@ -198,7 +240,7 @@ class Base:
         return PutItemsResponse(
             await cls._client.put_items(
                 cls.__base_name__,
-                [i.raw for i in items],
+                [i._with_defaults() for i in items],
                 expire_at=expire_at,
                 expire_in=expire_in,
             ),
@@ -220,7 +262,7 @@ class Base:
         return cls(
             **await cls._client.insert_item(
                 cls.__base_name__,
-                item.raw,
+                item._with_defaults(),
                 expire_at=expire_at,
                 expire_in=expire_in,
             )

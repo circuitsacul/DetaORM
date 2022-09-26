@@ -4,6 +4,7 @@ import typing as t
 
 from detaorm import update
 from detaorm.query import Query
+from detaorm.undef import UNDEF, UndefOr
 
 if t.TYPE_CHECKING:
     from detaorm.base import Base
@@ -33,6 +34,14 @@ class Field(t.Generic[_TYPE]):
 
     name: str
     """The name of the field."""
+
+    def __init__(self, default: UndefOr[_TYPE] = UNDEF) -> None:
+        if default is not UNDEF:
+            self._default = default
+
+    @property
+    def default(self) -> UndefOr[_TYPE]:
+        return self._default if hasattr(self, "_default") else UNDEF
 
     @property
     def qual_name(self) -> str:
@@ -87,19 +96,19 @@ class Field(t.Generic[_TYPE]):
 
     # updates
     def set(self, value: object) -> update.SetUpdate:
-        return update.SetUpdate({self.name: value})
+        return update.SetUpdate({self.qual_name: value})
 
     def increment(self, value: int) -> update.IncrementUpdate:
-        return update.IncrementUpdate({self.name: value})
+        return update.IncrementUpdate({self.qual_name: value})
 
     def append(self, values: list[object]) -> update.AppendUpdate:
-        return update.AppendUpdate({self.name: values})
+        return update.AppendUpdate({self.qual_name: values})
 
     def prepend(self, values: list[object]) -> update.PrependUpdate:
-        return update.PrependUpdate({self.name: values})
+        return update.PrependUpdate({self.qual_name: values})
 
     def delete(self) -> update.DeleteUpdate:
-        return update.DeleteUpdate([self.name])
+        return update.DeleteUpdate([self.qual_name])
 
     # magic
     __eq__ = eq  # type: ignore
@@ -111,6 +120,24 @@ class Field(t.Generic[_TYPE]):
 
 
 class NestedField(Field[t.Dict[str, object]]):
+    def __init__(self) -> None:
+        super().__init__()
+
+    @property
+    def default(self) -> UndefOr[dict[str, object]]:
+        if hasattr(self, "_default"):
+            return self._default
+
+        defaults: dict[str, object] = {}
+        for k, v in type(self).__dict__.items():
+            if not isinstance(v, Field):
+                continue
+
+            if v.default is not UNDEF:
+                defaults[k] = v.default
+
+        return defaults or UNDEF
+
     @property
     def raw(self) -> dict[str, object]:
         raise NotImplementedError
