@@ -102,7 +102,6 @@ class Base:
 
     def __init__(self, **values: object) -> None:
         self.raw = values
-        self._updates: dict[str, object] = {}
 
     def _with_defaults(self) -> dict[str, object]:
         dct = self._defaults.copy()
