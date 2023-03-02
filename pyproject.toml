@@ -15,7 +15,7 @@ python = "^3.8"
 aiohttp = "^3.8.1"
 
 [tool.poetry.group.dev.dependencies]
-black = "^22.8.0"
+black = ">=22.8,<24.0"
 isort = "^5.10.1"
 flake8 = "^5.0.4"
 mypy = "^0.971"
