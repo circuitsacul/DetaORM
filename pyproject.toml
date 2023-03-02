@@ -18,7 +18,7 @@ aiohttp = "^3.8.1"
 black = "^22.8.0"
 isort = "^5.10.1"
 flake8 = "^5.0.4"
-mypy = "^0.971"
+mypy = ">=0.971,<1.1"
 nox = "^2022.8.7"
 
 [build-system]
