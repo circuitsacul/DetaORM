@@ -189,7 +189,7 @@ class Client:
             expire_at: The time at which the item should expire (UTC timetamp).
             expire_in: The time until this item should expire."""
 
-        json = _with_ttl({"item": item}, expire_at, expire_in)
+        json = {"item": _with_ttl(item, expire_at, expire_in)}
         url = self._build_url(base_name, "items")
         resp = await self._session.post(url, json=json)
         return t.cast(RAW_ITEM, await resp.json())
